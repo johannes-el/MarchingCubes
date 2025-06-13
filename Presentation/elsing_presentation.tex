@@ -1,0 +1,423 @@
+\documentclass{beamer}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[ngerman]{babel}
+\usepackage{amsmath, amssymb}
+\usepackage[babel,german=quotes]{csquotes}
+\usepackage{tikz}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{subcaption} % Add this in your preamble
+\usepackage{fontawesome5}
+\usepackage{comment}
+\usepackage{hyperref}
+\usepackage{changepage}
+
+% \let\olditem\item
+% \renewcommand{\item}{\olditem\vspace{0.3cm}}
+
+\usepackage[sfdefault]{roboto}
+\usefonttheme{professionalfonts}
+
+% \usepackage[sfdefault]{sourcesanspro}
+% \usefonttheme{professionalfonts}
+
+% \usepackage[sfdefault,light]{sourcesanspro}
+% \usefonttheme{professionalfonts}
+
+\usetheme{Copenhagen}
+% \usetheme{Frankfurt}
+\setbeamertemplate{headline}{}
+\setbeamertemplate{navigation symbols}{}
+\setbeamercovered{transparent}
+
+\title{\textbf{Marching Cubes}}
+\subtitle{\small Ein Verfahren zur hochauflösenden 3D-Oberflächenrekonstruktion}
+\author{Johannes Elsing}
+\institute{Universität Freiburg}
+\date{\today}
+
+\setbeamercolor{author in head/foot}{bg=lightgray, fg=black}
+
+\setbeamertemplate{footline}{
+  \leavevmode%
+  \hbox{%
+    \begin{beamercolorbox}[wd=\paperwidth,ht=2.5ex,dp=1ex,leftskip=1em,rightskip=1em]{author in head/foot}%
+      % \tiny Universität Freiburg -- Computer Science Department \hfill \insertshorttitle{} \hfill \insertframenumber{}/\inserttotalframenumber
+      \tiny Universität Freiburg -- Institut für Informatik -- Computergrafik \hfill \insertframenumber{}/\inserttotalframenumber
+    \end{beamercolorbox}
+  }%
+}
+
+\begin{document}
+\AtBeginSection[]{
+  \begin{frame}
+    \frametitle{Inhalt}
+    \tableofcontents[currentsection]
+  \end{frame}
+}
+
+\maketitle
+
+\begin{frame}
+  \frametitle{Inhalt}
+  \tableofcontents
+\end{frame}
+
+\section{Einführung}
+\begin{frame}[t]
+  \frametitle{Einführung}
+\begin{minipage}{\textwidth}
+\includegraphics[scale=1]{Images/diagram.pdf}
+\end{minipage}
+\begin{center}
+\includegraphics[scale=0.3]{Images/before.png}
+\hspace{2.8cm}
+\includegraphics[scale=0.3]{Images/after.png}
+\end{center}
+
+\vfill
+\begin{columns}[t]
+  \column{0.5\textwidth}
+  \textbf{Eingabe}
+  \begin{itemize}
+    \item Kubische Gitterdaten (Voxel)
+    \item Isowert
+  \end{itemize}
+
+  \column{0.5\textwidth}
+  \textbf{Ausgabe}
+  \begin{itemize}
+    \item Isofläche
+    \item Normalen der Eckpunkte
+  \end{itemize}
+\end{columns}
+
+\end{frame}
+
+\begin{frame}[t]
+  \frametitle{Was ist Marching Cubes?}
+  \centering
+  % TikZ timeline
+  \vspace{0.5cm}
+  \begin{tikzpicture}[scale=0.8, every node/.style={font=\scriptsize}]
+    \fill[blue!10] (-1,-1) rectangle (11.5,2);
+    \draw[->, thick] (0,0) -- (10.5,0) node[right] {Zeit};
+
+    \foreach \x/\year in {0/1987, 2/1991, 4/1995, 7/2004, 10/2021} {
+      \draw[thick] (\x,0.15) -- (\x,-0.15);
+      \node[align=center] at (\x,-0.5) {\year};
+    }
+
+    \node[align=center] at (0,0.9) {Marching\\Cubes};
+    \node[align=center] at (2,0.6) {Asymptotic\\Decider};
+    \node[align=center] at (2,1.5) {Marching\\Tetrahedra/};
+    \node[align=center] at (4,0.9) {Marching\\Cubes 33};
+    \node[align=center] at (7,0.9) {Dual\\Marching Cubes};
+    \node[align=center] at (10,0.9) {Neural\\Marching Cubes};
+  \end{tikzpicture}
+
+  \vspace{-0.5cm}
+  \includegraphics[width=\textwidth, trim=0 30 0 0, clip]{Images/scalar_field.pdf}
+
+  \vspace{-0.5em}
+
+  \begin{minipage}[t]{0.48\textwidth}
+    \hspace*{2em}
+    \raggedright
+    Input: Skalarfeld
+  \end{minipage}
+  \hfill
+  \begin{minipage}[t]{0.48\textwidth}
+    \raggedleft
+    Output: Triangulierte Isofläche
+  \end{minipage}
+\end{frame}
+
+\section{Anwendungsbereiche}
+\begin{frame}[t]
+  \frametitle{Anwendungsbereiche von Voxeldaten}
+  \begin{itemize}
+    \item \textbf{Medizin:} CT-, MRT-Volumendaten
+    \item \textbf{Ingenieurwesen:} Temperatur-/Drucksimulation
+    \item \textbf{Strömungssimulation:} Raumdiskretisierung
+    \item \textbf{Computergrafik:} Terrain, Wolken, visuelle Effekte
+  \end{itemize}
+  \vspace{0.4cm}
+  \centering
+  \includegraphics[scale=0.17]{Images/intersectedfoot.jpg}~\scriptsize[1]
+  \includegraphics[scale=0.21]{Images/skull.png}~\scriptsize[2]
+  \includegraphics[scale=0.1]{Images/terrain.jpg}~\scriptsize[3]
+  \includegraphics[scale=0.3]{Images/tori.png}~\scriptsize[4]
+\end{frame}
+
+\section{Funktionsweise}
+\begin{frame}[t]
+  \frametitle{Wähle Zelle aus}
+  \vspace{0.8cm}
+  \hspace*{-0.8cm}\includegraphics[scale=1.2]{Images/select_cell_1.pdf}
+\end{frame}
+
+\begin{frame}[t]
+  \frametitle{Klassifizierung}
+  \vspace{0.8cm}
+  \hspace*{-0.8cm}\includegraphics[scale=1.2]{Images/select_cell_2.pdf}
+\end{frame}
+
+\begin{frame}[t]
+  \frametitle{Indexberechnung}
+  \begin{center}
+  \vspace{-0.5cm}
+  \includegraphics[scale=2.2]{Images/cube_index.pdf}
+  \vspace{-3cm}
+  \begin{itemize}
+    \item 8-Bit-Binärzahl (0–255)
+  \end{itemize}
+  \end{center}
+\end{frame}
+
+% \begin{frame}[t]
+%  \frametitle{Grundprinzip: Isofläche}
+%  \begin{itemize}
+%    \item Ziel: Approximation einer Isofläche durch eine Linie innerhalb eines Gitters.
+%    \item Isofläche (2D): $\forall a = (x, y) \in \mathbb{R}^2: f(a) = \rho$
+%    \item Vergleiche Werte an Gitterpunkten $f(x, y)$ mit Schwellenwert $\rho$
+%    \item Linie trennt Bereiche mit $f(x, y) < \rho$ und $f(x, y) > \rho$
+%  \end{itemize}
+% \end{frame}
+
+\begin{frame}[t]
+  \frametitle{Lookup \& Dreiecke}
+  \begin{center}
+  \makebox[\linewidth]{%
+    \includegraphics[scale=0.35]{Images/Type-of-surface-combinations-for-the-marching-cube-algorithm.png}~\scriptsize[5]
+  }
+  \end{center}
+  \begin{itemize}
+    \item Für jede Konfiguration existiert eine Dreieckstopologie
+    \item Nutzung einer Lookup-Tabelle
+  \end{itemize}
+\end{frame}
+
+\begin{frame}[t]
+  \frametitle{Kanteninterpolation}
+  \begin{itemize}
+    \item Schnittpunkte auf Kanten werden linear interpoliert.
+    \item Glattere und realistischere Darstellung.
+  \end{itemize}
+  \vspace{0.5em}
+  Für Eckpunkte $A$ und $B$ mit Werten $f_A$, $f_B$ und Isowert $\rho_{iso}$:
+  \[
+    t = \frac{\rho_{iso} - f_A}{f_B - f_A}, \quad
+    \vec{P} = \vec{A} + t \cdot (\vec{B} - \vec{A})
+  \]
+  \vspace{0.5em}
+\noindent
+\begin{minipage}{\linewidth}
+  \hspace{1cm}\includegraphics[scale=0.6]{Images/interpolation.pdf}
+\end{minipage}
+\end{frame}
+
+\section{Normalenberechnung}
+\begin{frame}
+  \frametitle{Normalen aus Gradienten}
+  \begin{itemize}
+    \item Für realistisches Shading notwendig (Phong-Shading, Gouraud-Shading...)
+  \end{itemize}
+  \begin{center}
+    \[
+      G_x(i,j,k) = \frac{D(i+1, j, k) - D(i-1, j, k)}{2 \Delta x}
+    \]
+    \[
+      G_y(i,j,k) = \frac{D(i, j+1, k) - D(i, j-1, k)}{2 \Delta y}
+    \]
+    \[
+      G_z(i,j,k) = \frac{D(i, j, k+1) - D(i, j, k-1)}{2 \Delta z}
+    \]
+    \[
+      \mathbf{n} = -\nabla D = - \begin{pmatrix} G_x \\ G_y \\ G_z \end{pmatrix}, \quad
+      \hat{\mathbf{n}} = \frac{\mathbf{n}}{\|\mathbf{n}\|}
+    \]
+  \end{center}
+\end{frame}
+
+% Optimierung
+\section{Optimierung}
+\begin{frame}[t]
+  \frametitle{Grenzen und Verbesserungen}
+  \begin{itemize}
+    \item leere Zellen
+    \item Ambiguitäten bei bestimmten Konfigurationen
+  \end{itemize}
+
+  \begin{center}
+  \includegraphics[scale=2.5]{Images/ambiguous_case.pdf}
+  \end{center}
+
+  \begin{itemize}
+    \item Lösungsansätze:
+    \begin{itemize}
+      \item Asymptotic Decider
+      \item Dual Marching Cubes
+    \end{itemize}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}[t]
+  \frametitle{Asymptotic Decider}
+    \centering
+    \[
+    B(s, t) =
+    (1 - s, s)
+    \begin{pmatrix}
+    B_{00} & B_{01} \\
+    B_{10} & B_{11}
+    \end{pmatrix}
+    \begin{pmatrix}
+    1 - t \\
+    t
+    \end{pmatrix}
+    \]
+
+\begin{columns}[c]
+
+  \column{0.5\textwidth}
+  \vspace{-10cm}
+  \[
+    \{(s, t) \in [0,1]^2 \mid B(s, t) = \rho_{\text{iso}}\}
+  \]
+  Ambiguität: Beide Hyperbeln schneiden $[0, 1]^2$
+
+  \column{0.5\textwidth}
+  \centering
+  \vspace{0.2cm}
+  \includegraphics[scale=0.5]{Images/asymptotic_decider.pdf}
+
+\end{columns}
+
+\end{frame}
+
+\begin{frame}[t]
+  \frametitle{Marching Tetrahedra}
+
+  \begin{itemize}
+    \item Würfel $\rightarrow$ 6 Tetraeder (gemeinsame Raumdiagonale)
+    \item Keine topologischen Mehrdeutigkeiten
+    \item 4 Ecken $\Rightarrow$ 16 Konfigurationen
+  \end{itemize}
+
+  \vspace{1ex}
+
+  \hfill % schiebt alles nach rechts
+  \begin{minipage}{0.9\textwidth}
+    \begin{columns}[onlytextwidth]
+      \column{0.45\textwidth}
+        \includegraphics[scale=0.4]{Images/TetrasCases.png}~\scriptsize[6]
+      \column{0.45\textwidth}
+      \raggedleft
+        \includegraphics[scale=0.1]{Images/cubesubdivisions.jpg}~\scriptsize[7]
+    \end{columns}
+  \end{minipage}
+\end{frame}
+
+\begin{frame}[t]
+  \frametitle{Marching Cubes 33}
+
+  \makebox[\linewidth][l]{
+    \hspace*{-1cm}
+    \begin{minipage}{0.95\linewidth}
+      \begin{columns}[c]
+        \column{0.55\textwidth}
+        \parbox[t]{\linewidth}{
+          \begin{itemize}
+            \item Erweiterung des klassischen MC
+            \item Vermeidung topologischer Fehler
+            \item zusätzliche Konfigurationen (33 statt 15)
+            \item Verwendet u.\,a. \textbf{Asymptotic Decider} zur Auswahl korrekter Triangulierungen
+          \end{itemize}
+        }
+
+        \column{0.40\textwidth}
+        \centering
+        \hspace*{-0.45cm}
+        \includegraphics[scale=0.13]{Images/MC33.png}~\scriptsize[8]\\
+      \end{columns}
+    \end{minipage}
+  }
+\end{frame}
+
+\begin{frame}[t]
+  \frametitle{Dual Marching Cubes}
+  \begin{itemize}
+    \item Pro Zelle im Octree ein Vertex im Dualgitter
+    \item Vertex durch Minimierung einer QEF (Quadratische Fehlerfunktion) bestimmt
+    \item QEF basiert auf Tangentialebenen der impliziten Funktion im Zellinneren
+\end{itemize}
+\includegraphics[scale=0.3]{Images/horse.png}~\scriptsize[9]
+\hspace{1cm}
+\includegraphics[scale=0.2]{Images/DualMarchingCubes.png}~\scriptsize[10]
+\end{frame}
+
+\begin{frame}[t]
+  \frametitle{Neural Marching Cubes}
+  \noindent
+  \makebox[\linewidth]{%
+    \includegraphics[scale=0.1]{Images/teaser.png}~\scriptsize[11]
+    \hfill%
+  }
+  \begin{itemize}
+    \item neuronales Netz
+    \item geometrische Merkmale (scharfe Kanten und Ecken)
+  \end{itemize}
+\end{frame}
+
+% Zusammenfassung
+\section{Zusammenfassung}
+\begin{frame}[t]
+  \frametitle{Zusammenfassung Marching Cubes}
+  \begin{itemize}
+    \item Effizienter Algorithmus zur Isoflächen-Erzeugung aus volumetrischen Daten
+    \item Einfach, schnell, weit verbreitet % in Medizin, Simulation und Grafik
+    \item Herausforderungen:
+    \begin{itemize}
+      \item Ambiguitäten (topologische Inkonsistenzen)
+      \item Hoher Speicherbedarf
+    \end{itemize}
+    \item Normale: aus Gradienten der Skalarwerte berechnet (z.\,B. zentrale Differenzen)
+    \item Erweiterungen:
+    \begin{itemize}
+      \item \textbf{Asymptotic Decider}: vermeidet Ambiguitäten
+      \item \textbf{Marching Tetrahedra}: vermeidet Ambiguitäten
+      \item \textbf{MC 33}: topologisch korrekt
+      \item \textbf{Dual MC}: bessere Meshqualität (Quads)
+      \item \textbf{Neural MC}: lernbasierte Oberflächenapproximation
+    \end{itemize}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}[t]
+\frametitle{Bildquellen}
+\tiny
+\raggedright
+[1] \url{https://www.cs.carleton.edu/cs_comps/0405/shape/smoothing.html}\par % foot
+[2] \url{https://www.researchgate.net/figure/fig1_246088590}\par % Skull
+[3] \url{https://www.youtube.com/watch?v=cAN0ClpPR48}\par % Terrain
+[4] \url{https://github.com/BelfrySCAD/BOSL2/wiki/isosurface.scad}\par % Tori
+[5] \url{https://www.researchgate.net/figure/Type-of-surface-combinations-for-the-marching-cube-algorithm-The-black-circles-means_fig2_282209849}\par
+[6] \url{https://commons.wikimedia.org/wiki/File:TetrasCases.png}\par
+[7] \url{https://github.com/andresbejarano/MarchingTetrahedra}\par % tetrahedra
+[8] \url{https://www.cs.jhu.edu/~misha/ReadingSeminar/Papers/Chernyaev96.pdf}\par
+[9] \url{https://www.cs.rice.edu/~jwarren/papers/dmc.pdf}\par % horse
+[10] \url{https://hub.jmonkeyengine.org/t/jmonkey-dual-marching-cubes/25783}\par
+[11] \url{https://arxiv.org/pdf/2106.11272}\par
+\end{frame}
+
+\begin{frame}[t]
+\frametitle{Quellenangaben}
+Lorensen, W. E., \& Cline, H. E. (1987). \textit{Marching Cubes: A High Resolution 3D Surface Construction Algorithm}. ACM SIGGRAPH Computer Graphics, 21(4), 163–169.\par
+% Chen, Z., & Zhang, H. (2021). \textit{Neural Marching Cubes}\url{https://arxiv.org/abs/2106.11272}\par
+https://de.wikipedia.org/wiki/Marching_Cubes
+https://dl.acm.org/doi/10.5555/1025128.1026029
+\end{frame}
+\end{document}

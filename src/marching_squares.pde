@@ -66,26 +66,35 @@ void draw() {
   }
 
   if (!done) {
-    int speed = 4;
-    for (int i = 0; i < speed; i++) {
-      drawMarchingSquare(probeX, probeY);
+  int speed = 4;
+  for (int i = 0; i < speed; i++) {
+    drawMarchingSquare(probeX, probeY);
 
-      probeX++;
-      if (probeX >= cols - 1) {
-        probeX = 0;
-        probeY++;
-        if (probeY >= rows - 1) {
-          done = true;
-          break;
-        }
+    probeX++;
+    if (probeX >= cols - 1) {
+      probeX = 0;
+      probeY++;
+      if (probeY >= rows - 1) {
+        done = true;
+        break;
       }
     }
-
-    stroke(0, 150, 255);
-    strokeWeight(2);
-    noFill();
-    rect(probeX * resolution, probeY * resolution, resolution, resolution);
   }
+
+  // Draw the rectangle on the **previous** probe cell
+  int drawX = probeX - 1;
+  int drawY = probeY;
+  if (drawX < 0) {
+    drawX = cols - 2;
+    drawY = probeY - 1;
+  }
+
+  stroke(0, 150, 255);
+  strokeWeight(2);
+  noFill();
+  rect(drawX * resolution, drawY * resolution, resolution, resolution);
+}
+
 }
 
 void drawMarchingSquare(int x, int y) {
